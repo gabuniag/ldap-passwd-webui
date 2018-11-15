@@ -1,1 +1,6 @@
-/settings.ini
+settings.ini
+.idea/*
+ca.pem
+ldap.key
+ldap.pem
+

@@ -4,7 +4,7 @@ import bottle
 from bottle import get, post, static_file, request, route, template
 from bottle import SimpleTemplate
 from configparser import ConfigParser
-from ldap3 import Connection, Server
+from ldap3 import Connection, Server, Tls
 from ldap3 import SIMPLE, SUBTREE
 from ldap3.core.exceptions import LDAPBindError, LDAPConstraintViolationResult, \
     LDAPInvalidCredentialsResult, LDAPUserNameIsMandatoryError, \
@@ -12,13 +12,17 @@ from ldap3.core.exceptions import LDAPBindError, LDAPConstraintViolationResult, 
 import logging
 import os
 from os import environ, path
-
+import ssl
 
 BASE_DIR = path.dirname(__file__)
 LOG = logging.getLogger(__name__)
 LOG_FORMAT = '%(asctime)s %(levelname)s: %(message)s'
 VERSION = '2.0.0'
 
+
+# tls_conf = Tls(local_private_key_file='ldap.key', local_certificate_file='ldap.pem',
+#                validate=ssl.CERT_REQUIRED, version=ssl.PROTOCOL_TLSv1, ca_certs_file='ca.pem')
+# print(tls_conf)
 
 @get('/')
 def get_index():
@@ -58,11 +62,23 @@ def index_tpl(**kwargs):
     return template('index', **kwargs)
 
 
+def construct_tls():
+    try:
+        return Tls(local_private_key_file=CONF['tls']['key_file'],
+                   local_certificate_file=CONF['tls']['cert_file'],
+                   validate=ssl.CERT_REQUIRED, version=ssl.PROTOCOL_TLSv1,
+                   ca_certs_file=CONF['tls']['ca_file'])
+    except KeyError:
+        return None
+
+
 def connect_ldap(**kwargs):
+    tls_conf = construct_tls()
     server = Server(host=CONF['ldap']['host'],
                     port=CONF['ldap'].getint('port', None),
                     use_ssl=CONF['ldap'].getboolean('use_ssl', False),
-                    connect_timeout=5)
+                    connect_timeout=5,
+                    tls=tls_conf)
 
     return Connection(server, raise_exceptions=True, **kwargs)
 
@@ -93,7 +109,7 @@ def change_password(*args):
 
 def change_password_ldap(username, old_pass, new_pass):
     with connect_ldap() as c:
-        user_dn = find_user_dn(c, username)
+        user_dn = find_user_dn(c, username, )
 
     # Note: raises LDAPUserNameIsMandatoryError when user_dn is None.
     with connect_ldap(authentication=SIMPLE, user=user_dn, password=old_pass) as c:
@@ -113,7 +129,7 @@ def change_password_ad(username, old_pass, new_pass):
 def find_user_dn(conn, uid):
     search_filter = CONF['ldap']['search_filter'].replace('{uid}', uid)
     conn.search(CONF['ldap']['base'], "(%s)" % search_filter, SUBTREE)
-
+    # print(conn.response[0]['dn'])
     return conn.response[0]['dn'] if conn.response else None
 
 
@@ -143,7 +159,6 @@ bottle.TEMPLATE_PATH = [BASE_DIR]
 # Set default attributes to pass into templates.
 SimpleTemplate.defaults = dict(CONF['html'])
 SimpleTemplate.defaults['url'] = bottle.url
-
 
 # Run bottle internal server when invoked directly (mainly for development).
 if __name__ == '__main__':

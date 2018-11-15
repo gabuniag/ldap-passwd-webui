@@ -8,6 +8,12 @@ use_ssl = true
 base = ou=People,dc=example,dc=org
 search_filter = uid={uid}
 
+# Uncomment if your ldap server requires client to present those files
+#[tls]
+#key_file = ldap.key
+#cert_file = ldap.pem
+#ca_file = ca.pem
+
 # Uncomment for AD / Samba 4
 #type = ad
 #ad_domain = ad.example.org
